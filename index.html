@@ -115,6 +115,18 @@
         }
         .btn-save:hover, .btn-add:hover { background-color: #4DE9D7; }
 
+        /* 新增刪除所有參與人的按鈕樣式 */
+        .btn-delete-all {
+            background-color: #D32F2F; /* 更醒目的紅色 */
+            color: #FFFFFF;
+            padding: 10px 15px;
+            width: 100%;
+            margin-top: 15px;
+        }
+        .btn-delete-all:hover {
+            background-color: #E53935;
+        }
+
         .btn-delete {
             background-color: #555555;
             color: var(--color-text-light);
@@ -161,7 +173,7 @@
     <div class="main-layout">
         
         <div id="product-management" class="section">
-            <h2>🛍️ 商品管理</h2>
+            <h2>🛍️ 獎品管理</h2>
             <div id="add-prize">
                 <input type="text" id="prize-name-input" placeholder="獎品名稱 (e.g., iPhone 17)">
                 <input type="number" id="prize-qty-input" placeholder="數量" value="1" min="1">
@@ -184,14 +196,16 @@
             </table>
         </div>
 
-        <div id="employee-draw-management" class="section">
-            <h2>🧑 員工管理</h2>
-            <div id="add-employee">
-                <input type="text" id="employee-name-input" placeholder="員工姓名">
-                <button class="btn btn-add" onclick="addEmployee()">新增員工</button>
+        <div id="participant-draw-management" class="section">
+            <h2>🧑 參與人管理</h2>
+            <div id="add-participant">
+                <input type="text" id="participant-name-input" placeholder="參與人姓名">
+                <button class="btn btn-add" onclick="addParticipant()">新增參與人</button>
             </div>
             
-            <h3>抽獎操作</h3>
+            <button class="btn btn-delete-all" onclick="deleteAllParticipants()">⚡ 刪除所有參與人紀錄</button>
+
+            <h3 style="margin-top: 30px;">抽獎操作</h3>
             <label for="prize-select">選擇要抽獎的獎品:</label>
             <select id="prize-select">
                 <option value="">-- 請選擇 --</option>
@@ -199,14 +213,14 @@
             
             <button class="btn btn-draw" onclick="handleDrawPrize()">抽出 1 位得獎者</button>
 
-            <h3 style="margin-top: 30px;">抽獎紀錄</h3>
-            <table id="employee-list-table">
+            <h3 style="margin-top: 30px;">參與人名單 (抽獎紀錄)</h3>
+            <table id="participant-list-table">
                 <thead>
                     <tr>
                         <th>姓名</th>
                         <th>狀態</th>
                         <th>中獎獎品</th>
-                    </tr>
+                        <th>操作</th> </tr>
                 </thead>
                 <tbody>
                     </tbody>
@@ -227,7 +241,7 @@
         // 2. Firebase 初始化和資料庫操作
         // ====================================
 
-        // !! 請務必將這裡的配置替換為您自己的 Firebase 專案配置 !!
+        // !! 請將這裡的配置替換為您提供的 Firebase 配置 !!
         const firebaseConfig = {
             apiKey: "AIzaSyDqMLRGCLVqsbgCcVTFv99J5SxI5XzK_Uw",
             authDomain: "project-2465603039340300163.firebaseapp.com",
@@ -241,7 +255,7 @@
         try {
             firebase.initializeApp(firebaseConfig);
             const db = firebase.firestore();
-            window.db = db; // 為了方便在全域環境使用
+            window.db = db; 
         } catch (e) {
             console.error("Firebase 初始化失敗，請檢查配置和網路連線。", e);
             alert("Firebase 初始化失敗，請檢查配置和網路連線。");
@@ -250,11 +264,12 @@
 
         // 集合名稱
         const PRIZES_COLLECTION = 'prizes';
-        const EMPLOYEES_COLLECTION = 'employees';
+        // 集合名稱變更：從 employees 變為 participants
+        const PARTICIPANTS_COLLECTION = 'participants'; 
 
 
         // ====================================
-        // 3. 商品管理功能
+        // 3. 獎品管理功能 (無變動)
         // ====================================
 
         function addPrize() {
@@ -285,7 +300,7 @@
         // 刪除獎品 (使用文件 ID)
         function deletePrize(id) {
              if (!window.db) return alert("資料庫未連接。");
-            if (confirm("確定要刪除此獎品嗎？請確認沒有員工中過此獎項。")) {
+            if (confirm("確定要刪除此獎品嗎？請確認沒有參與人中過此獎項。")) {
                 window.db.collection(PRIZES_COLLECTION).doc(id).delete()
                     .then(() => console.log("獎品刪除成功"))
                     .catch(error => console.error("刪除獎品失敗: ", error));
@@ -294,33 +309,78 @@
 
 
         // ====================================
-        // 4. 員工管理功能
+        // 4. 參與人管理功能 (Participant Management)
         // ====================================
         
-        function addEmployee() {
+        function addParticipant() {
              if (!window.db) return alert("資料庫未連接。");
-            const name = document.getElementById('employee-name-input').value.trim();
+            const name = document.getElementById('participant-name-input').value.trim();
             if (!name) {
-                alert("請輸入員工姓名。");
+                alert("請輸入參與人姓名。");
                 return;
             }
 
-            window.db.collection(EMPLOYEES_COLLECTION).add({
+            window.db.collection(PARTICIPANTS_COLLECTION).add({
                 name: name,
-                status: 'pending', 
+                status: 'pending', // 尚未中獎
                 prize: ''
             }).then(() => {
-                document.getElementById('employee-name-input').value = '';
-                console.log("員工新增成功");
+                document.getElementById('participant-name-input').value = '';
+                console.log("參與人新增成功");
             }).catch(error => {
-                console.error("新增員工失敗: ", error);
-                alert("新增員工失敗，請檢查 Firebase 權限（Security Rules）。");
+                console.error("新增參與人失敗: ", error);
+                alert("新增參與人失敗，請檢查 Firebase 權限（Security Rules）。");
             });
+        }
+        
+        // 單獨刪除參與人
+        function deleteParticipant(id, name) {
+            if (!window.db) return alert("資料庫未連接。");
+            if (confirm(`確定要刪除參與人【${name}】的紀錄嗎？`)) {
+                window.db.collection(PARTICIPANTS_COLLECTION).doc(id).delete()
+                    .then(() => console.log(`參與人【${name}】刪除成功`))
+                    .catch(error => console.error("刪除參與人失敗: ", error));
+            }
+        }
+
+        // 一鍵刪除所有參與人紀錄
+        async function deleteAllParticipants() {
+            if (!window.db) return alert("資料庫未連接。");
+            
+            const confirmMsg = "!!! 警告 !!!\n\n您確定要永久刪除所有參與人的紀錄嗎？此操作無法復原。\n\n請輸入「DELETE ALL」確認：";
+            const userInput = prompt(confirmMsg);
+
+            if (userInput !== 'DELETE ALL') {
+                alert("輸入不符，操作取消。");
+                return;
+            }
+
+            try {
+                // 獲取所有參與人文件
+                const snapshot = await window.db.collection(PARTICIPANTS_COLLECTION).get();
+                
+                if (snapshot.empty) {
+                    alert("參與人清單已是空的。");
+                    return;
+                }
+
+                const batch = window.db.batch();
+                snapshot.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+
+                await batch.commit();
+                alert(`成功刪除 ${snapshot.size} 筆參與人紀錄。`);
+
+            } catch (error) {
+                console.error("刪除所有參與人失敗: ", error);
+                alert("刪除所有參與人紀錄失敗，請檢查 Firebase 權限或網路連線。");
+            }
         }
 
 
         // ====================================
-        // 5. 抽獎核心邏輯
+        // 5. 抽獎核心邏輯 (僅修改集合名稱)
         // ====================================
         
         async function handleDrawPrize(drawCount = 1) {
@@ -348,26 +408,26 @@
                 return;
             }
 
-            // 2. 選擇符合抽獎資格的員工 (status: 'pending')
-            const eligibleSnapshot = await window.db.collection(EMPLOYEES_COLLECTION)
+            // 2. 選擇符合抽獎資格的參與人 (status: 'pending')
+            const eligibleSnapshot = await window.db.collection(PARTICIPANTS_COLLECTION)
                                               .where('status', '==', 'pending')
                                               .get();
-            const eligibleEmployees = eligibleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const eligibleParticipants = eligibleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            if (eligibleEmployees.length === 0) {
-                alert("沒有可抽獎的員工了！所有人都已中獎。");
+            if (eligibleParticipants.length === 0) {
+                alert("沒有可抽獎的參與人或所有人都已中獎。");
                 return;
             }
 
             // 3. 隨機選中得獎者
-            const randomIndex = Math.floor(Math.random() * eligibleEmployees.length);
-            const winner = eligibleEmployees[randomIndex];
+            const randomIndex = Math.floor(Math.random() * eligibleParticipants.length);
+            const winner = eligibleParticipants[randomIndex];
 
             // 4. 更新 Firebase 資料庫 (批次寫入 - 確保原子性)
             const batch = window.db.batch();
 
-            // a. 更新員工狀態
-            const winnerRef = window.db.collection(EMPLOYEES_COLLECTION).doc(winner.id);
+            // a. 更新參與人狀態
+            const winnerRef = window.db.collection(PARTICIPANTS_COLLECTION).doc(winner.id);
             batch.update(winnerRef, { 
                 status: 'won', 
                 prize: selectedPrizeName 
@@ -425,33 +485,34 @@
                 });
             });
 
-            // 監聽 Employees 集合 (實時更新員工和中獎紀錄)
-            window.db.collection(EMPLOYEES_COLLECTION).orderBy('status').onSnapshot(snapshot => {
-                const employeeTableBody = document.getElementById('employee-list-table').getElementsByTagName('tbody')[0];
-                employeeTableBody.innerHTML = '';
+            // 監聽 Participants 集合 (實時更新參與人名單和中獎紀錄)
+            window.db.collection(PARTICIPANTS_COLLECTION).orderBy('status').onSnapshot(snapshot => {
+                const participantTableBody = document.getElementById('participant-list-table').getElementsByTagName('tbody')[0];
+                participantTableBody.innerHTML = '';
 
                 snapshot.forEach(doc => {
-                    const emp = doc.data();
-                    const row = employeeTableBody.insertRow();
-                    row.insertCell(0).textContent = emp.name;
-                    row.insertCell(1).textContent = emp.status === 'won' ? '✅ 已中獎' : '⏳ 待抽獎';
-                    row.insertCell(2).textContent = emp.prize || 'N/A';
+                    const participant = doc.data();
+                    const id = doc.id;
+                    const row = participantTableBody.insertRow();
+                    row.insertCell(0).textContent = participant.name;
+                    row.insertCell(1).textContent = participant.status === 'won' ? '✅ 已中獎' : '⏳ 待抽獎';
+                    row.insertCell(2).textContent = participant.prize || 'N/A';
+                    
+                    // 獨立刪除按鈕
+                    const actionCell = row.insertCell(3);
+                    actionCell.innerHTML = `<button class="btn btn-delete" onclick="deleteParticipant('${id}', '${participant.name}')">刪除</button>`;
                 });
             });
         }
 
 
-        // 中獎結果顯示和特效
+        // 中獎結果顯示和特效 (無變動)
         function displayWinner(winnerName, prizeName) {
             const winnerDisplay = document.getElementById('winner-display');
             
-            // 1. 顯示中獎結果
             winnerDisplay.innerHTML = `🎉 恭喜 **${winnerName}**！抽中 **${prizeName}**！🎊`;
-            
-            // 2. 觸發 CSS 動畫
             winnerDisplay.classList.add('winner-active');
 
-            // 3. 觸發五彩紙屑特效
             confetti({
                 particleCount: 150,
                 spread: 90,
@@ -459,7 +520,6 @@
                 origin: { y: 0.7 }
             });
             
-            // 4. 數秒後移除 CSS 特效
             setTimeout(() => {
                 winnerDisplay.classList.remove('winner-active');
                 winnerDisplay.style.background = ''; 
@@ -472,7 +532,6 @@
         window.onload = () => {
             const winnerDisplay = document.getElementById('winner-display');
             if (winnerDisplay) {
-                // 將預設訊息顯示出來
                 winnerDisplay.innerHTML = '尚未進行抽獎，請在上方選擇獎品並按下抽獎按鈕！';
                 winnerDisplay.style.opacity = '1';
                 winnerDisplay.style.transform = 'scale(1)';
