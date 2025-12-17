@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>深色系抽獎系統</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        /* ==================================== */
+        /* 1. 深色系 CSS 樣式 */
+        /* ==================================== */
+        :root {
+            --color-bg-dark: #121212;
+            --color-bg-section: #1E1E1E;
+            --color-text-light: #E0E0E0;
+            --color-accent-purple: #BB86FC;
+            --color-accent-red: #CF6679;
+            --color-accent-teal: #03DAC6;
+            --color-border: #333333;
+        }
+
+        body {
+            background-color: var(--color-bg-dark);
+            color: var(--color-text-light);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .section, #draw-result-section {
+            background-color: var(--color-bg-section);
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        h2 {
+            color: var(--color-accent-purple);
+            border-bottom: 2px solid var(--color-border);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        /* 表單元素 */
+        input[type="text"], input[type="number"], select {
+            background-color: #2A2A2A;
+            border: 1px solid #555555;
+            color: var(--color-text-light);
+            padding: 10px;
+            border-radius: 5px;
+            width: calc(100% - 22px);
+            margin-bottom: 15px;
+            box-sizing: border-box; 
+        }
+
+        /* 表格樣式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th, td {
+            border: 1px solid var(--color-border);
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #2A2A2A;
+            color: #FFFFFF;
+        }
+
+        /* 按鈕樣式 */
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 3px;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-draw {
+            background-color: var(--color-accent-red); 
+            color: #FFFFFF;
+            padding: 15px 30px;
+            font-size: 1.1em;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .btn-draw:hover { background-color: #FF5566; }
+
+        .btn-save, .btn-add {
+            background-color: var(--color-accent-teal); 
+            color: var(--color-bg-dark);
+        }
+        .btn-save:hover, .btn-add:hover { background-color: #4DE9D7; }
+
+        .btn-delete {
+            background-color: #555555;
+            color: var(--color-text-light);
+        }
+        .btn-delete:hover { background-color: #777777; }
+
+        /* 中獎特效區塊 */
+        #winner-display {
+            text-align: center;
+            padding: 30px;
+            margin-top: 20px;
+            background-color: #2A2A2A;
+            color: var(--color-text-light);
+            font-size: 1.5em;
+            font-weight: bold;
+            border-radius: 10px;
+            opacity: 0;
+            transform: scale(0.9);
+            transition: all 0.5s ease-out;
+            min-height: 80px; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 中獎時的動畫效果 */
+        .winner-active {
+            opacity: 1 !important;
+            transform: scale(1) !important;
+            background-color: var(--color-accent-purple) !important;
+            color: var(--color-bg-dark) !important;
+            animation: flashBorder 1.5s infinite alternate; 
+        }
+
+        /* 邊框閃爍動畫 */
+        @keyframes flashBorder {
+            from { box-shadow: 0 0 10px var(--color-accent-purple); }
+            to { box-shadow: 0 0 40px #FFD700; } 
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-layout">
+        
+        <div id="product-management" class="section">
+            <h2>🛍️ 商品管理</h2>
+            <div id="add-prize">
+                <input type="text" id="prize-name-input" placeholder="獎品名稱 (e.g., iPhone 17)">
+                <input type="number" id="prize-qty-input" placeholder="數量" value="1" min="1">
+                <button class="btn btn-add" onclick="addPrize()">新增獎品</button>
+            </div>
+            
+            <h3>獎品清單</h3>
+            <table id="prize-list-table">
+                <thead>
+                    <tr>
+                        <th>名稱</th>
+                        <th>總數</th>
+                        <th>已抽</th>
+                        <th>剩餘</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+        </div>
+
+        <div id="employee-draw-management" class="section">
+            <h2>🧑 員工管理</h2>
+            <div id="add-employee">
+                <input type="text" id="employee-name-input" placeholder="員工姓名">
+                <button class="btn btn-add" onclick="addEmployee()">新增員工</button>
+            </div>
+            
+            <h3>抽獎操作</h3>
+            <label for="prize-select">選擇要抽獎的獎品:</label>
+            <select id="prize-select">
+                <option value="">-- 請選擇 --</option>
+                </select>
+            
+            <button class="btn btn-draw" onclick="handleDrawPrize()">抽出 1 位得獎者</button>
+
+            <h3 style="margin-top: 30px;">抽獎紀錄</h3>
+            <table id="employee-list-table">
+                <thead>
+                    <tr>
+                        <th>姓名</th>
+                        <th>狀態</th>
+                        <th>中獎獎品</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div id="draw-result-section" class="section">
+        <h2>🎉 抽獎結果</h2>
+        <div id="winner-display">
+            尚未進行抽獎，請在上方選擇獎品並按下抽獎按鈕！
+        </div>
+    </div>
+
+
+    <script>
+        // ====================================
+        // 2. Firebase 初始化和資料庫操作
+        // ====================================
+
+        // !! 請務必將這裡的配置替換為您自己的 Firebase 專案配置 !!
+        const firebaseConfig = {
+            apiKey: "AIzaSyDqMLRGCLVqsbgCcVTFv99J5SxI5XzK_Uw",
+            authDomain: "project-2465603039340300163.firebaseapp.com",
+            projectId: "project-2465603039340300163",
+            storageBucket: "project-2465603039340300163.firebasestorage.app",
+            messagingSenderId: "716358251346",
+            appId: "1:716358251346:web:c3a468ba4ce2145adf008b"
+        };
+
+        // 初始化 Firebase
+        try {
+            firebase.initializeApp(firebaseConfig);
+            const db = firebase.firestore();
+            window.db = db; // 為了方便在全域環境使用
+        } catch (e) {
+            console.error("Firebase 初始化失敗，請檢查配置和網路連線。", e);
+            alert("Firebase 初始化失敗，請檢查配置和網路連線。");
+        }
+
+
+        // 集合名稱
+        const PRIZES_COLLECTION = 'prizes';
+        const EMPLOYEES_COLLECTION = 'employees';
+
+
+        // ====================================
+        // 3. 商品管理功能
+        // ====================================
+
+        function addPrize() {
+            if (!window.db) return alert("資料庫未連接。");
+            const name = document.getElementById('prize-name-input').value.trim();
+            const total = parseInt(document.getElementById('prize-qty-input').value);
+
+            if (!name || total <= 0 || isNaN(total)) {
+                alert("請輸入正確的獎品名稱和數量。");
+                return;
+            }
+
+            window.db.collection(PRIZES_COLLECTION).add({
+                name: name,
+                total: total,
+                drawn: 0,
+                remaining: total
+            }).then(() => {
+                document.getElementById('prize-name-input').value = '';
+                document.getElementById('prize-qty-input').value = '1';
+                console.log("獎品新增成功");
+            }).catch(error => {
+                console.error("新增獎品失敗: ", error);
+                alert("新增獎品失敗，請檢查 Firebase 權限（Security Rules）。");
+            });
+        }
+        
+        // 刪除獎品 (使用文件 ID)
+        function deletePrize(id) {
+             if (!window.db) return alert("資料庫未連接。");
+            if (confirm("確定要刪除此獎品嗎？請確認沒有員工中過此獎項。")) {
+                window.db.collection(PRIZES_COLLECTION).doc(id).delete()
+                    .then(() => console.log("獎品刪除成功"))
+                    .catch(error => console.error("刪除獎品失敗: ", error));
+            }
+        }
+
+
+        // ====================================
+        // 4. 員工管理功能
+        // ====================================
+        
+        function addEmployee() {
+             if (!window.db) return alert("資料庫未連接。");
+            const name = document.getElementById('employee-name-input').value.trim();
+            if (!name) {
+                alert("請輸入員工姓名。");
+                return;
+            }
+
+            window.db.collection(EMPLOYEES_COLLECTION).add({
+                name: name,
+                status: 'pending', 
+                prize: ''
+            }).then(() => {
+                document.getElementById('employee-name-input').value = '';
+                console.log("員工新增成功");
+            }).catch(error => {
+                console.error("新增員工失敗: ", error);
+                alert("新增員工失敗，請檢查 Firebase 權限（Security Rules）。");
+            });
+        }
+
+
+        // ====================================
+        // 5. 抽獎核心邏輯
+        // ====================================
+        
+        async function handleDrawPrize(drawCount = 1) {
+             if (!window.db) return alert("資料庫未連接。");
+
+            const prizeSelect = document.getElementById('prize-select');
+            const selectedPrizeId = prizeSelect.value;
+
+            if (!selectedPrizeId) {
+                alert("請先選擇一個獎品。");
+                return;
+            }
+            
+            const selectedOption = prizeSelect.options[prizeSelect.selectedIndex];
+            const selectedPrizeName = selectedOption.textContent.replace(/ \(剩餘: \d+\)$/, '');
+
+
+            // 1. 檢查獎品庫存
+            const prizeRef = window.db.collection(PRIZES_COLLECTION).doc(selectedPrizeId);
+            const prizeDoc = await prizeRef.get();
+            const prizeData = prizeDoc.data();
+
+            if (!prizeData || prizeData.remaining < drawCount) {
+                alert(`獎品【${prizeData ? prizeData.name : 'N/A'}】數量不足或資料不存在！`);
+                return;
+            }
+
+            // 2. 選擇符合抽獎資格的員工 (status: 'pending')
+            const eligibleSnapshot = await window.db.collection(EMPLOYEES_COLLECTION)
+                                              .where('status', '==', 'pending')
+                                              .get();
+            const eligibleEmployees = eligibleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            if (eligibleEmployees.length === 0) {
+                alert("沒有可抽獎的員工了！所有人都已中獎。");
+                return;
+            }
+
+            // 3. 隨機選中得獎者
+            const randomIndex = Math.floor(Math.random() * eligibleEmployees.length);
+            const winner = eligibleEmployees[randomIndex];
+
+            // 4. 更新 Firebase 資料庫 (批次寫入 - 確保原子性)
+            const batch = window.db.batch();
+
+            // a. 更新員工狀態
+            const winnerRef = window.db.collection(EMPLOYEES_COLLECTION).doc(winner.id);
+            batch.update(winnerRef, { 
+                status: 'won', 
+                prize: selectedPrizeName 
+            });
+
+            // b. 更新獎品庫存
+            batch.update(prizeRef, { 
+                drawn: firebase.firestore.FieldValue.increment(drawCount),
+                remaining: firebase.firestore.FieldValue.increment(-drawCount)
+            });
+
+            try {
+                await batch.commit();
+                // 5. 顯示結果和特效
+                displayWinner(winner.name, selectedPrizeName);
+            } catch (error) {
+                console.error("抽獎和資料庫更新失敗: ", error);
+                alert("抽獎和資料庫更新失敗，請檢查 Firebase 權限和網路連線。");
+            }
+        }
+        
+        // ====================================
+        // 6. 介面更新與特效 (使用 Realtime Listeners)
+        // ====================================
+
+        if (window.db) {
+            // 監聽 Prizes 集合 (實時更新獎品清單和下拉選單)
+            window.db.collection(PRIZES_COLLECTION).onSnapshot(snapshot => {
+                const prizeTableBody = document.getElementById('prize-list-table').getElementsByTagName('tbody')[0];
+                const prizeSelect = document.getElementById('prize-select');
+                prizeTableBody.innerHTML = '';
+                prizeSelect.innerHTML = '<option value="">-- 請選擇 --</option>'; 
+
+                snapshot.forEach(doc => {
+                    const prize = doc.data();
+                    const id = doc.id;
+
+                    // 更新表格
+                    const row = prizeTableBody.insertRow();
+                    row.insertCell(0).textContent = prize.name;
+                    row.insertCell(1).textContent = prize.total;
+                    row.insertCell(2).textContent = prize.drawn;
+                    row.insertCell(3).textContent = prize.remaining;
+                    
+                    const actionCell = row.insertCell(4);
+                    actionCell.innerHTML = `<button class="btn btn-delete" onclick="deletePrize('${id}')">刪除</button>`;
+                    
+                    // 更新下拉選單 (只顯示有剩餘數量的獎品)
+                    if (prize.remaining > 0) {
+                        const option = document.createElement('option');
+                        option.value = id;
+                        option.textContent = `${prize.name} (剩餘: ${prize.remaining})`;
+                        prizeSelect.appendChild(option);
+                    }
+                });
+            });
+
+            // 監聽 Employees 集合 (實時更新員工和中獎紀錄)
+            window.db.collection(EMPLOYEES_COLLECTION).orderBy('status').onSnapshot(snapshot => {
+                const employeeTableBody = document.getElementById('employee-list-table').getElementsByTagName('tbody')[0];
+                employeeTableBody.innerHTML = '';
+
+                snapshot.forEach(doc => {
+                    const emp = doc.data();
+                    const row = employeeTableBody.insertRow();
+                    row.insertCell(0).textContent = emp.name;
+                    row.insertCell(1).textContent = emp.status === 'won' ? '✅ 已中獎' : '⏳ 待抽獎';
+                    row.insertCell(2).textContent = emp.prize || 'N/A';
+                });
+            });
+        }
+
+
+        // 中獎結果顯示和特效
+        function displayWinner(winnerName, prizeName) {
+            const winnerDisplay = document.getElementById('winner-display');
+            
+            // 1. 顯示中獎結果
+            winnerDisplay.innerHTML = `🎉 恭喜 **${winnerName}**！抽中 **${prizeName}**！🎊`;
+            
+            // 2. 觸發 CSS 動畫
+            winnerDisplay.classList.add('winner-active');
+
+            // 3. 觸發五彩紙屑特效
+            confetti({
+                particleCount: 150,
+                spread: 90,
+                startVelocity: 55,
+                origin: { y: 0.7 }
+            });
+            
+            // 4. 數秒後移除 CSS 特效
+            setTimeout(() => {
+                winnerDisplay.classList.remove('winner-active');
+                winnerDisplay.style.background = ''; 
+                winnerDisplay.style.color = '';
+                winnerDisplay.innerHTML = '點擊上方按鈕進行下一輪抽獎。';
+            }, 6000); 
+        }
+
+        // 初始化時確保顯示區塊處於靜止狀態
+        window.onload = () => {
+            const winnerDisplay = document.getElementById('winner-display');
+            if (winnerDisplay) {
+                // 將預設訊息顯示出來
+                winnerDisplay.innerHTML = '尚未進行抽獎，請在上方選擇獎品並按下抽獎按鈕！';
+                winnerDisplay.style.opacity = '1';
+                winnerDisplay.style.transform = 'scale(1)';
+            }
+        };
+
+    </script>
+</body>
+</html>
